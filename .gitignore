@@ -1,11 +1,41 @@
-.env
-.take-home-token
-node_modules/
-__pycache__/
-.venv/
-.DS_Store
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# gcloud SDK installs (in case anyone unpacks it inside the repo)
-.gcloud/
-google-cloud-sdk/
-google-cloud-cli-*.tar.gz
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
