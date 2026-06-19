@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Clock, Dumbbell, CheckCircle2, SkipForward } from 'lucide-react'
+import { Clock, Dumbbell, CheckCircle2, SkipForward, Loader2 } from 'lucide-react'
 import { formatDuration, displayVolume } from '@/lib/utils'
 
 interface WorkoutSummaryModalProps {
@@ -12,7 +13,7 @@ interface WorkoutSummaryModalProps {
   weightUnit: 'lbs' | 'kg'
   completedExercises: string[]
   skippedExercises: string[]
-  onSave: () => void
+  onSave: () => Promise<void>
   onContinue: () => void
   onRemove: () => void
 }
@@ -22,6 +23,28 @@ export function WorkoutSummaryModal({
   completedExercises, skippedExercises, onSave, onContinue, onRemove,
 }: WorkoutSummaryModalProps) {
   const volume = displayVolume(totalVolumeLbs, weightUnit)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isRemoving, setIsRemoving] = useState(false)
+
+  const handleSave = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    try {
+      await onSave()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleRemove = async () => {
+    if (isRemoving) return
+    setIsRemoving(true)
+    try {
+      await onRemove()
+    } finally {
+      setIsRemoving(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onContinue()}>
@@ -71,10 +94,26 @@ export function WorkoutSummaryModal({
         </div>
 
         <div className="flex flex-col gap-2">
-          <Button className="w-full rounded-xl" onClick={onSave}>Save Workout</Button>
-          <Button variant="outline" className="w-full rounded-xl" onClick={onContinue}>Continue Workout</Button>
-          <Button variant="ghost" className="w-full rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onRemove}>
-            Remove Workout
+          <Button className="w-full rounded-xl" onClick={handleSave} disabled={isSaving || isRemoving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="animate-spin w-4 h-4" />
+                Saving…
+              </>
+            ) : (
+              'Save Workout'
+            )}
+          </Button>
+          <Button variant="outline" className="w-full rounded-xl" onClick={onContinue} disabled={isSaving || isRemoving}>Continue Workout</Button>
+          <Button variant="ghost" className="w-full rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleRemove} disabled={isRemoving || isSaving}>
+            {isRemoving ? (
+              <>
+                <Loader2 className="animate-spin w-4 h-4" />
+                Removing…
+              </>
+            ) : (
+              'Remove Workout'
+            )}
           </Button>
         </div>
       </DialogContent>

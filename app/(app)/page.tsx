@@ -98,7 +98,7 @@ export default async function DashboardPage() {
       {draft && (
         <ResumeBanner
           draftId={draft.id}
-          routineName={(draft.routines as { name: string } | null)?.name ?? null}
+          routineName={(draft.routines as unknown as { name: string } | null)?.name ?? null}
         />
       )}
 
@@ -152,10 +152,10 @@ export default async function DashboardPage() {
             {recentWorkouts.map((w) => {
               const exercises = (w.workout_exercises ?? []) as { exercise_name: string; status: string }[]
               const completed = exercises.filter(e => e.status === 'completed')
-              const routineName = (w.routines as { name: string } | null)?.name
+              const routineName = (w.routines as unknown as { name: string } | null)?.name
 
               return (
-                <Link key={w.id} href={`/history/${w.id}`}>
+                <Link key={w.id} href={`/history/${w.id}`} className="block">
                   <Card className="hover:bg-accent/50 transition-colors">
                     <CardContent className="flex items-center justify-between py-2 px-3">
                       <div className="flex-1 min-w-0">

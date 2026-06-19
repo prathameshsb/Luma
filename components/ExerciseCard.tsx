@@ -1,40 +1,56 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Circle, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { CheckCircle2, Circle, Trash2, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { cn, convertWeightToLbs } from '@/lib/utils'
 import { VoiceButton } from '@/components/VoiceButton'
 import { SetRow } from '@/components/SetRow'
+import { isGenericExerciseName } from '@/lib/workout-parser'
+import type { ParsedSet } from '@/lib/workout-parser'
+import { toast } from 'sonner'
+import type { WeightUnit } from '@/lib/types'
+import type { EffortLevel } from '@/lib/types'
 
 export interface LiveSet {
   id: string
   weightLbs: number | null
   reps: number
-  effort: 'easy' | 'medium' | 'hard'
+  effort: EffortLevel
 }
 
 interface ExerciseCardProps {
   exerciseName: string
-  weightUnit: 'lbs' | 'kg'
+  weightUnit: WeightUnit
   initialSets?: LiveSet[]
   mode: 'routine' | 'free-form'
   targetSets?: number | null
   targetReps?: number | null
   onComplete: (sets: LiveSet[]) => void
   onDelete: () => void
+  onNameChange?: (name: string) => void
   defaultExpanded?: boolean
 }
 
 export function ExerciseCard({
   exerciseName, weightUnit, initialSets, mode,
-  targetSets, targetReps, onComplete, onDelete, defaultExpanded,
+  targetSets, targetReps, onComplete, onDelete, onNameChange, defaultExpanded,
 }: ExerciseCardProps) {
   const [sets, setSets] = useState<LiveSet[]>(initialSets ?? [])
   const [completed, setCompleted] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded ?? false)
   const [processing, setProcessing] = useState(false)
+  const [localName, setLocalName] = useState(exerciseName)
+  const [editingName, setEditingName] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  const commitName = (value: string) => {
+    const trimmed = value.trim() || localName
+    setLocalName(trimmed)
+    setEditingName(false)
+    onNameChange?.(trimmed)
+  }
 
   const handleTranscript = async (text: string) => {
     setProcessing(true)
@@ -42,31 +58,36 @@ export function ExerciseCard({
       const res = await fetch('/api/parse-workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript: text,
-          mode,
-          exerciseName,
-          weightUnit,
-        }),
+        body: JSON.stringify({ transcript: text, mode, exerciseName: localName, weightUnit }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        toast.error("Couldn't parse that — please try again")
+        return
+      }
       const data = await res.json()
-      const parsed = data.exercises?.[0]?.sets?.[0]
-      if (!parsed) return
-      // API returns weight in user's display unit — convert to lbs for storage
-      const weightLbs = parsed.weight === null
-        ? null
-        : weightUnit === 'kg'
-          ? Math.round(parsed.weight / 0.453592 * 10) / 10
-          : parsed.weight
-      setSets(prev => [...prev, {
-        id: Date.now().toString(),
-        weightLbs,
+
+      const parsedSets: ParsedSet[] =
+        data.exercises?.[0]?.sets ?? []
+      if (parsedSets.length === 0) return
+
+      if (mode === 'free-form') {
+        const returnedName: string | undefined = data.exercises?.[0]?.name
+        if (returnedName && !isGenericExerciseName(returnedName) && returnedName !== localName) {
+          setLocalName(returnedName)
+          onNameChange?.(returnedName)
+        }
+      }
+
+      const newSets: LiveSet[] = parsedSets.map((parsed, i) => ({
+        id: `${Date.now()}-${i}`,
+        weightLbs: parsed.weight === null ? null : convertWeightToLbs(parsed.weight, weightUnit),
         reps: parsed.reps,
         effort: parsed.effort,
-      }])
+      }))
+
+      setSets(prev => [...prev, ...newSets])
     } catch {
-      // silent fail — user can retry
+      toast.error("Couldn't reach the server — please try again")
     } finally {
       setProcessing(false)
     }
@@ -86,6 +107,13 @@ export function ExerciseCard({
     setSets(prev => prev.filter(s => s.id !== id))
   }
 
+  const voicePlaceholder =
+    mode === 'free-form' && sets.length === 0
+      ? 'Say exercise + weight, reps & effort…'
+      : sets.length === 0
+        ? 'Say weight, reps & effort…'
+        : 'Add another set…'
+
   return (
     <Card className={cn('gradient-card transition-opacity', completed && 'opacity-60')}>
       <CardContent className="p-4">
@@ -104,11 +132,36 @@ export function ExerciseCard({
             }
           </button>
 
-          <span className={cn('flex-1 font-semibold text-sm truncate', completed && 'line-through text-muted-foreground')}>
-            {exerciseName}
-          </span>
+          {mode === 'free-form' && !completed && editingName ? (
+            <input
+              ref={nameInputRef}
+              autoFocus
+              value={localName}
+              onChange={e => setLocalName(e.target.value)}
+              onBlur={e => commitName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitName(localName)
+                if (e.key === 'Escape') { setLocalName(exerciseName); setEditingName(false) }
+              }}
+              onClick={e => e.stopPropagation()}
+              className="flex-1 bg-transparent text-sm font-semibold outline-none border-b border-primary/60 pb-0.5 min-w-0"
+            />
+          ) : (
+            <span className={cn('flex-1 font-semibold text-sm truncate', completed && 'line-through text-muted-foreground')}>
+              {localName}
+            </span>
+          )}
 
           <div className="flex items-center gap-1">
+            {mode === 'free-form' && !completed && !editingName && (
+              <button
+                onClick={e => { e.stopPropagation(); setEditingName(true) }}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                title="Rename exercise"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={e => { e.stopPropagation(); onDelete() }}
               className="text-muted-foreground hover:text-destructive transition-colors p-1"
@@ -126,14 +179,12 @@ export function ExerciseCard({
         {/* Expanded body */}
         {expanded && !completed && (
           <div className="mt-4 space-y-3">
-            {/* Target */}
-            {mode === 'routine' && (targetSets || targetReps) && (
+            {mode === 'routine' && (targetSets != null || targetReps != null) && (
               <p className="text-xs text-muted-foreground">
                 Target: {targetSets ?? '?'} × {targetReps ?? '?'}
               </p>
             )}
 
-            {/* Sets table */}
             {sets.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 px-0 mb-1">
@@ -160,16 +211,14 @@ export function ExerciseCard({
               </div>
             )}
 
-            {/* Separator + mic */}
             <div className="border-t border-border/50 pt-3">
               <VoiceButton
                 onTranscript={handleTranscript}
                 processing={processing}
-                placeholder={sets.length === 0 ? 'Say weight, reps & effort…' : 'Add another set…'}
+                placeholder={voicePlaceholder}
               />
             </div>
 
-            {/* Mark complete */}
             {sets.length > 0 && (
               <Button
                 variant="outline"
@@ -178,7 +227,7 @@ export function ExerciseCard({
                 onClick={handleComplete}
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
-                Done with {exerciseName}
+                Done with {localName}
               </Button>
             )}
           </div>

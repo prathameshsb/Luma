@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { Plus, Flag, X, ChevronLeft } from 'lucide-react'
+import { Plus, Flag, X, ChevronLeft, Loader2 } from 'lucide-react'
 import { WorkoutTimer } from '@/components/WorkoutTimer'
 import { ExerciseCard, type LiveSet } from '@/components/ExerciseCard'
 import { StartWorkoutModal } from '@/components/StartWorkoutModal'
@@ -48,6 +48,10 @@ export default function WorkoutPage() {
   const [exercises, setExercises] = useState<LiveExercise[]>([])
   const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>('lbs')
 
+  // Loading states
+  const [loading, setLoading] = useState(true)
+  const [navLoading, setNavLoading] = useState(false)
+
   // Modal state
   const [showStartModal, setShowStartModal] = useState(false)
   const [showNavWarning, setShowNavWarning] = useState(false)
@@ -64,25 +68,33 @@ export default function WorkoutPage() {
   // Load user profile + routines on mount
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.replace('/login'); return }
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { router.replace('/login'); return }
 
-      const [profileRes, routinesRes] = await Promise.all([
-        supabase.from('user_profiles').select('weight_unit').eq('id', user.id).single(),
-        supabase.from('routines').select('id, name').eq('user_id', user.id).order('created_at', { ascending: false }),
-      ])
-      if (profileRes.data) setWeightUnit(profileRes.data.weight_unit ?? 'lbs')
-      if (routinesRes.data) setRoutines(routinesRes.data)
+        const [profileRes, routinesRes] = await Promise.all([
+          supabase.from('user_profiles').select('weight_unit').eq('id', user.id).single(),
+          supabase.from('routines').select('id, name').eq('user_id', user.id).order('created_at', { ascending: false }),
+        ])
+        if (profileRes.data) setWeightUnit(profileRes.data.weight_unit ?? 'lbs')
+        if (routinesRes.data) setRoutines(routinesRes.data)
 
-      const resumeId = searchParams.get('resume')
-      const routineId = searchParams.get('routine')
+        const resumeId = searchParams.get('resume')
+        const routineId = searchParams.get('routine')
 
-      if (resumeId) {
-        await resumeDraft(resumeId)
-      } else if (routineId) {
-        await startRoutineWorkout(routineId)
-      } else {
-        setShowStartModal(true)
+        if (resumeId) {
+          await resumeDraft(resumeId)
+        } else if (routineId) {
+          await startRoutineWorkout(routineId)
+        } else {
+          setShowStartModal(true)
+        }
+      } catch (err) {
+        console.error('Failed to initialize workout page:', err)
+        toast.error('Something went wrong loading the page. Please try again.')
+        router.replace('/')
+      } finally {
+        setLoading(false)
       }
     }
     init()
@@ -157,7 +169,8 @@ export default function WorkoutPage() {
       started_at: now.toISOString(),
     }).select('id').single()
 
-    if (!workout) return
+    if (!workout) throw new Error('Failed to create workout')
+    workoutIdRef.current = workout.id  // set ref synchronously so onClose sees it
     setWorkoutId(workout.id)
     setStartedAt(now)
     setRoutine({ id: rt.id, name: rt.name })
@@ -190,7 +203,8 @@ export default function WorkoutPage() {
       started_at: now.toISOString(),
     }).select('id').single()
 
-    if (!workout) return
+    if (!workout) throw new Error('Failed to create workout')
+    workoutIdRef.current = workout.id  // set ref synchronously so onClose sees it
     setWorkoutId(workout.id)
     setStartedAt(now)
     setMode('free-form')
@@ -218,6 +232,10 @@ export default function WorkoutPage() {
     setExercises(prev => prev.filter(ex => ex.id !== id))
   }, [])
 
+  const handleExerciseNameChange = useCallback((id: string, name: string) => {
+    setExercises(prev => prev.map(ex => ex.id === id ? { ...ex, exercise_name: name } : ex))
+  }, [])
+
   const handleSkip = useCallback((id: string) => {
     setExercises(prev => prev.map(ex => ex.id === id ? { ...ex, skipped: true, completed: false } : ex))
   }, [])
@@ -231,70 +249,89 @@ export default function WorkoutPage() {
   }
 
   const removeWorkout = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase.from('workouts').delete().eq('user_id', user.id).eq('status', 'draft')
-    } else if (workoutId) {
-      await supabase.from('workouts').delete().eq('id', workoutId)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('workouts').delete().eq('user_id', user.id).eq('status', 'draft')
+      } else if (workoutId) {
+        await supabase.from('workouts').delete().eq('id', workoutId)
+      }
+      leaveWorkout()
+    } catch (err) {
+      toast.error('Failed to remove workout — please try again')
+      throw err
     }
-    leaveWorkout()
   }
 
   const saveDraft = async () => {
     if (!workoutId) return
-    await saveExercisesToDB(workoutId)
-    toast.success('Draft saved')
-    leaveWorkout()
+    try {
+      await saveExercisesToDB(workoutId)
+      toast.success('Draft saved')
+      leaveWorkout()
+    } catch {
+      toast.error('Failed to save draft. Please try again.')
+    }
   }
 
   const saveCompleted = async () => {
     if (!workoutId || !startedAt) return
-    const durationSeconds = Math.floor((Date.now() - startedAt.getTime()) / 1000)
-    await saveExercisesToDB(workoutId)
-    await supabase.from('workouts').update({
-      status: 'completed',
-      finished_at: new Date().toISOString(),
-      duration_seconds: durationSeconds,
-    }).eq('id', workoutId)
-    toast.success('Workout saved!')
-    leaveWorkout()
+    try {
+      const durationSeconds = Math.floor((Date.now() - startedAt.getTime()) / 1000)
+      await saveExercisesToDB(workoutId)
+      const { error: updateError } = await supabase.from('workouts').update({
+        status: 'completed',
+        finished_at: new Date().toISOString(),
+        duration_seconds: durationSeconds,
+      }).eq('id', workoutId)
+      if (updateError) throw updateError
+      toast.success('Workout saved!')
+      leaveWorkout()
+    } catch {
+      toast.error('Failed to save workout. Please try again.')
+    }
   }
 
   const saveExercisesToDB = async (wid: string) => {
-    // Delete existing workout_exercises to replace with current state
-    await supabase.from('workout_exercises').delete().eq('workout_id', wid)
+    try {
+      // Delete existing workout_exercises to replace with current state
+      await supabase.from('workout_exercises').delete().eq('workout_id', wid)
 
-    for (const ex of exercises) {
-      if (ex.skipped) {
-        await supabase.from('workout_exercises').insert({
+      for (const ex of exercises) {
+        if (ex.skipped) {
+          await supabase.from('workout_exercises').insert({
+            workout_id: wid,
+            exercise_name: ex.exercise_name,
+            wger_exercise_id: ex.wger_exercise_id ?? null,
+            status: 'skipped',
+            position: ex.position,
+          })
+          continue
+        }
+        if (ex.sets.length === 0 && !ex.completed) continue
+
+        const { data: weRow } = await supabase.from('workout_exercises').insert({
           workout_id: wid,
           exercise_name: ex.exercise_name,
           wger_exercise_id: ex.wger_exercise_id ?? null,
-          status: 'skipped',
+          status: 'completed',
           position: ex.position,
-        })
-        continue
+        }).select('id').single()
+
+        if (!weRow) continue
+        await supabase.from('sets').insert(
+          ex.sets.map((s, i) => ({
+            workout_exercise_id: weRow.id,
+            set_number: i + 1,
+            weight_lbs: s.weightLbs,
+            reps: s.reps,
+            effort: s.effort,
+          }))
+        )
       }
-      if (ex.sets.length === 0 && !ex.completed) continue
-
-      const { data: weRow } = await supabase.from('workout_exercises').insert({
-        workout_id: wid,
-        exercise_name: ex.exercise_name,
-        wger_exercise_id: ex.wger_exercise_id ?? null,
-        status: 'completed',
-        position: ex.position,
-      }).select('id').single()
-
-      if (!weRow) continue
-      await supabase.from('sets').insert(
-        ex.sets.map((s, i) => ({
-          workout_exercise_id: weRow.id,
-          set_number: i + 1,
-          weight_lbs: s.weightLbs,
-          reps: s.reps,
-          effort: s.effort,
-        }))
-      )
+    } catch (err) {
+      console.error('Failed to save exercises to DB:', err)
+      throw err
     }
   }
 
@@ -316,6 +353,12 @@ export default function WorkoutPage() {
   const durationSeconds = startedAt ? Math.floor((Date.now() - startedAt.getTime()) / 1000) : 0
 
   // --- Render ---
+
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center">
+      <Loader2 className="animate-spin w-8 h-8 text-muted-foreground" />
+    </div>
+  )
 
   if (!mode && !showStartModal) return null
 
@@ -398,6 +441,7 @@ export default function WorkoutPage() {
                   targetReps={ex.target_reps}
                   onComplete={(sets) => handleExerciseComplete(ex.id, sets)}
                   onDelete={() => handleExerciseDelete(ex.id)}
+                  onNameChange={(name) => handleExerciseNameChange(ex.id, name)}
                   defaultExpanded={mode === 'free-form' && ex.sets.length === 0}
                 />
                 {mode === 'routine' && !ex.completed && (
@@ -436,17 +480,18 @@ export default function WorkoutPage() {
       {/* Modals */}
       <StartWorkoutModal
         open={showStartModal}
-        onClose={() => { setShowStartModal(false); if (!workoutId) router.replace('/') }}
+        onClose={() => { setShowStartModal(false); if (!workoutIdRef.current) router.replace('/') }}
         routines={routines}
-        onSelectRoutine={id => { setShowStartModal(false); startRoutineWorkout(id) }}
-        onFreeForm={() => { setShowStartModal(false); startFreeFormWorkout() }}
+        onSelectRoutine={startRoutineWorkout}
+        onFreeForm={startFreeFormWorkout}
       />
 
       <NavigationWarningModal
         open={showNavWarning}
         onCancel={() => setShowNavWarning(false)}
-        onSaveDraft={() => { setShowNavWarning(false); saveDraft() }}
-        onLoseWorkout={() => { setShowNavWarning(false); removeWorkout() }}
+        navLoading={navLoading}
+        onSaveDraft={async () => { setNavLoading(true); try { await saveDraft() } finally { setNavLoading(false); setShowNavWarning(false) } }}
+        onLoseWorkout={async () => { setNavLoading(true); try { await removeWorkout() } finally { setNavLoading(false); setShowNavWarning(false) } }}
       />
 
       <WorkoutSummaryModal
@@ -456,9 +501,9 @@ export default function WorkoutPage() {
         weightUnit={weightUnit}
         completedExercises={completedNames}
         skippedExercises={skippedNames}
-        onSave={() => { setShowSummary(false); saveCompleted() }}
+        onSave={async () => { setShowSummary(false); await saveCompleted() }}
         onContinue={() => setShowSummary(false)}
-        onRemove={() => { setShowSummary(false); removeWorkout() }}
+        onRemove={async () => { setShowSummary(false); await removeWorkout() }}
       />
     </div>
   )

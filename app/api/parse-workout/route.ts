@@ -1,44 +1,32 @@
-// TODO: Replace mock with real Claude API call
-
 import { NextResponse } from 'next/server'
+import { parseTranscript } from '@/lib/workout-parser'
+import type { WeightUnit } from '@/lib/types'
+
+// TODO: Replace parseTranscript with real Claude API call
 
 interface RequestBody {
   transcript: string
   mode: 'routine' | 'free-form'
   exerciseName?: string
-  weightUnit: 'lbs' | 'kg'
-}
-
-function parseMock(transcript: string, exerciseName: string | undefined) {
-  const lower = transcript.toLowerCase()
-
-  const weightMatch = lower.match(/(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?)/) || lower.match(/(\d+(?:\.\d+)?)\s*kg/)
-  const weight = weightMatch ? parseFloat(weightMatch[1]) : null
-
-  const repsMatch = lower.match(/(\d+)\s*reps?/)
-  const reps = repsMatch ? parseInt(repsMatch[1]) : 8
-
-  const effort: 'easy' | 'medium' | 'hard' =
-    /easy|light/.test(lower) ? 'easy' :
-    /hard|heavy|tough|brutal/.test(lower) ? 'hard' :
-    'medium'
-
-  return {
-    name: exerciseName ?? 'Exercise',
-    sets: [{ set_number: 1, weight, reps, effort }],
-  }
+  weightUnit: WeightUnit
 }
 
 export async function POST(request: Request) {
   try {
     const body: RequestBody = await request.json()
-    const { transcript, exerciseName } = body
+    const { transcript, mode, exerciseName, weightUnit } = body
 
     if (!transcript?.trim()) {
       return NextResponse.json({ error: 'transcript_required' }, { status: 400 })
     }
+    if (!['routine', 'free-form'].includes(mode)) {
+      return NextResponse.json({ error: 'invalid_mode' }, { status: 400 })
+    }
+    if (!['lbs', 'kg'].includes(weightUnit)) {
+      return NextResponse.json({ error: 'invalid_weight_unit' }, { status: 400 })
+    }
 
-    const exercise = parseMock(transcript, exerciseName)
+    const exercise = parseTranscript(transcript, mode, exerciseName, weightUnit)
     return NextResponse.json({ exercises: [exercise] })
   } catch {
     return NextResponse.json({ error: 'parse_failed' }, { status: 500 })

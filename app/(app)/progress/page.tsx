@@ -1,11 +1,8 @@
 import { redirect } from 'next/navigation'
 import { Dumbbell } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { toTitleCase } from '@/lib/utils'
 import { ProgressGrid, type ExerciseProgress, type ExerciseSession } from '@/components/ProgressDetailModal'
-
-function toTitleCase(name: string): string {
-  return name.replace(/\b\w/g, c => c.toUpperCase())
-}
 
 export default async function ProgressPage() {
   const supabase = await createClient()

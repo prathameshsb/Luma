@@ -4,51 +4,37 @@ import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-
-type Effort = 'easy' | 'medium' | 'hard'
+import { formatWeightDisplay, parseWeightInput } from '@/lib/utils'
+import { EFFORT_CONFIG } from '@/lib/constants'
+import type { WeightUnit } from '@/lib/types'
+import type { EffortLevel } from '@/lib/types'
 
 interface SetRowProps {
   setNumber: number
   weightLbs: number | null
   reps: number
-  effort: Effort
-  weightUnit: 'lbs' | 'kg'
-  onChange: (updates: Partial<{ weightLbs: number | null; reps: number; effort: Effort }>) => void
+  effort: EffortLevel
+  weightUnit: WeightUnit
+  onChange: (updates: Partial<{ weightLbs: number | null; reps: number; effort: EffortLevel }>) => void
   onDelete: () => void
 }
 
-const EFFORT_CONFIG = {
-  easy:   { label: 'Easy',   className: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  medium: { label: 'Medium', className: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-  hard:   { label: 'Hard',   className: 'bg-red-500/20 text-red-400 border-red-500/30' },
-}
-
-function toDisplay(weightLbs: number | null, unit: 'lbs' | 'kg'): string {
-  if (weightLbs === null) return ''
-  if (unit === 'kg') return String(Math.round(weightLbs * 0.453592 * 10) / 10)
-  return String(weightLbs)
-}
-
-function toStoredLbs(value: string, unit: 'lbs' | 'kg'): number | null {
-  const num = parseFloat(value)
-  if (isNaN(num) || num < 0) return null
-  return unit === 'kg' ? Math.round(num / 0.453592 * 10) / 10 : num
-}
+const MIN_REPS = 1
 
 export function SetRow({ setNumber, weightLbs, reps, effort, weightUnit, onChange, onDelete }: SetRowProps) {
   const [showEffortPicker, setShowEffortPicker] = useState(false)
-  const [weightInput, setWeightInput] = useState(toDisplay(weightLbs, weightUnit))
+  const [weightInput, setWeightInput] = useState(() => formatWeightDisplay(weightLbs, weightUnit))
 
   const handleWeightBlur = () => {
-    if (weightInput.trim() === '' || weightInput.toLowerCase() === 'bw') {
-      onChange({ weightLbs: null })
-    } else {
-      const stored = toStoredLbs(weightInput, weightUnit)
-      onChange({ weightLbs: stored })
-    }
+    onChange({ weightLbs: parseWeightInput(weightInput, weightUnit) })
   }
 
-  const handleEffortSelect = (e: Effort) => {
+  const handleRepsChange = (raw: string) => {
+    const parsed = parseInt(raw, 10)
+    onChange({ reps: Math.max(MIN_REPS, isNaN(parsed) ? MIN_REPS : parsed) })
+  }
+
+  const handleEffortSelect = (e: EffortLevel) => {
     onChange({ effort: e })
     setShowEffortPicker(false)
   }
@@ -76,9 +62,9 @@ export function SetRow({ setNumber, weightLbs, reps, effort, weightUnit, onChang
       <div className="flex items-center gap-1 w-14 shrink-0">
         <Input
           type="number"
-          min={1}
+          min={MIN_REPS}
           value={reps}
-          onChange={e => onChange({ reps: Math.max(1, parseInt(e.target.value) || 1) })}
+          onChange={e => handleRepsChange(e.target.value)}
           className="h-8 text-sm text-center px-1"
         />
       </div>
@@ -89,23 +75,23 @@ export function SetRow({ setNumber, weightLbs, reps, effort, weightUnit, onChang
           onClick={() => setShowEffortPicker(p => !p)}
           className={cn(
             'h-7 px-2 rounded-full text-[11px] font-semibold border transition-colors',
-            EFFORT_CONFIG[effort].className
+            EFFORT_CONFIG[effort].pillClass,
           )}
         >
           {EFFORT_CONFIG[effort].label}
         </button>
         {showEffortPicker && (
           <div className="absolute bottom-full right-0 mb-1 bg-card border border-border rounded-xl shadow-lg z-20 overflow-hidden">
-            {(Object.entries(EFFORT_CONFIG) as [Effort, typeof EFFORT_CONFIG[Effort]][]).map(([key, cfg]) => (
+            {(Object.entries(EFFORT_CONFIG) as [EffortLevel, typeof EFFORT_CONFIG[EffortLevel]][]).map(([key, cfg]) => (
               <button
                 key={key}
                 onClick={() => handleEffortSelect(key)}
                 className={cn(
                   'block w-full px-4 py-2 text-sm font-medium text-left hover:bg-accent transition-colors',
-                  key === effort && 'bg-accent'
+                  key === effort && 'bg-accent',
                 )}
               >
-                <span className={cn('font-semibold', cfg.className.split(' ').find(c => c.startsWith('text-')))}>{cfg.label}</span>
+                <span className={cn('font-semibold', cfg.textClass)}>{cfg.label}</span>
               </button>
             ))}
           </div>

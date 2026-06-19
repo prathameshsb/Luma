@@ -5,6 +5,7 @@ import { Mic, Loader2, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { SPEECH_LANG } from '@/lib/constants'
 
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
@@ -62,7 +63,7 @@ export function VoiceButton({
     const recognition = new SR()
     recognition.continuous = true
     recognition.interimResults = false
-    recognition.lang = 'en-US'
+    recognition.lang = SPEECH_LANG
     accumulatedRef.current = ''
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -115,6 +116,7 @@ export function VoiceButton({
             )}
             <button
               type="button"
+              aria-label={voiceState === 'listening' ? 'Stop recording' : 'Start recording'}
               onClick={handleMicClick}
               disabled={isMicDisabled}
               className={cn(
@@ -149,6 +151,7 @@ export function VoiceButton({
           type="button"
           size="icon"
           variant="outline"
+          aria-label="Send"
           onClick={handleTextSubmit}
           disabled={disabled || processing || !textInput.trim()}
         >

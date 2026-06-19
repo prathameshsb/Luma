@@ -116,26 +116,25 @@
 }
 
 @layer utilities {
-  /* Muted blue gradient for cards and pop-outs — dark mode */
-  .gradient-card {
-    @apply bg-gradient-to-br from-blue-950/70 to-slate-900/80 border border-white/8;
+  /* All cards: subtle gradient, no border */
+  .dark [data-slot="card"] {
+    background: linear-gradient(135deg, oklch(0.15 0.012 264), oklch(0.10 0.006 264));
   }
-  /* Light mode version */
-  :root:not(.dark) .gradient-card {
-    @apply bg-gradient-to-br from-blue-50 to-white border border-blue-100;
+  :root:not(.dark) [data-slot="card"] {
+    background: linear-gradient(135deg, oklch(1 0 0), oklch(0.97 0.005 264));
   }
 
-  /* Stronger highlight card (stats, featured) */
-  .gradient-highlight {
-    @apply bg-gradient-to-br from-blue-900/60 to-blue-950/80 border border-blue-800/30;
+  /* Accent gradient for stat cards */
+  .gradient-card {
+    background: linear-gradient(135deg, oklch(0.18 0.04 264), oklch(0.12 0.02 264)) !important;
   }
-  :root:not(.dark) .gradient-highlight {
-    @apply bg-gradient-to-br from-blue-100 to-blue-50 border border-blue-200;
+  :root:not(.dark) .gradient-card {
+    background: linear-gradient(135deg, oklch(0.95 0.03 264), oklch(1 0 0)) !important;
   }
 
   /* Glass effect for modals/sheets */
   .glass {
-    @apply backdrop-blur-xl bg-background/80 border border-border;
+    @apply backdrop-blur-xl bg-background/80;
   }
 
   /* Touch-friendly tap targets */

@@ -2,12 +2,9 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { toTitleCase } from '@/lib/utils'
 import { WeightUnitToggle } from '@/components/WeightUnitToggle'
 import { SignOutButton } from '@/components/SignOutButton'
-
-function toTitleCase(str: string): string {
-  return str.replace(/\b\w/g, c => c.toUpperCase())
-}
 
 export default async function ProfilePage() {
   const supabase = await createClient()

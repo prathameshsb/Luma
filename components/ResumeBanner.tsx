@@ -6,6 +6,7 @@ import { Play, ChevronRight, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { RESUME_BANNER_BG } from '@/lib/constants'
 
 interface ResumeBannerProps {
   draftId: string
@@ -29,8 +30,8 @@ export function ResumeBanner({ draftId, routineName }: ResumeBannerProps) {
   }
 
   return (
-    <Link href={`/workout?resume=${draftId}`}>
-      <Card className="border-primary/40 bg-primary/10 hover:bg-primary/15 transition-colors">
+    <Link href={`/workout?resume=${draftId}`} className="block">
+      <Card className="hover:opacity-90 transition-opacity" style={{ background: RESUME_BANNER_BG }}>
         <CardContent className="flex items-center justify-between py-3 px-4">
           <div className="flex items-center gap-2 min-w-0">
             <Play className="h-4 w-4 text-primary shrink-0" />

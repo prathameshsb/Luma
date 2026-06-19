@@ -68,7 +68,7 @@ export function ProgressGrid({ exercises, weightUnit }: ProgressGridProps) {
                   <YAxis width={32} tick={{ fontSize: 10 }} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: number) => [`${value} ${unit}`, '']}
+                    formatter={(value) => (typeof value === 'number' ? [`${value} ${unit}`, ''] : ['', ''])}
                     labelFormatter={label => `Date: ${label}`}
                   />
                   <Line
