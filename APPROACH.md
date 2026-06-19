@@ -61,9 +61,24 @@ Every async DB path has try/catch. Success toasts fire inside the try block, not
 
 ## What I'd Do Next
 
-**Streaming voice feedback**: show a live transcript as the user speaks rather than waiting for them to tap stop. The Web Speech API supports `interimResults` — wiring that to a live preview would make the mic feel more responsive.
+**Adaptive coaching engine**: VoiceLift already captures something almost no other workout app does — effort per set, as a first-class field. That data is the foundation of a real AI coaching layer.
 
-**Smarter effort defaults**: right now, effort defaults to "medium" when not mentioned. With a few sessions of history, the model could learn that this user always calls their third set hard, and pre-fill accordingly.
+The pipeline: a nightly job computes the 3-session trend for each exercise per user. If weight or reps are flat or declining, call the model with the last 5 sessions of `[date, weight, reps, effort]` tuples and ask it to diagnose *why* — not just flag that a stall occurred.
+
+The effort field is what makes the diagnosis meaningful. A stall at 185 lbs reads completely differently depending on effort:
+- Easy → Hard over 3 sessions: accumulating fatigue, likely needs a deload
+- Consistently Hard at the same weight: at a technique or recovery ceiling, not just a strength one
+- Effort stayed Easy/Medium throughout: undertrained, just needs a push
+
+The output is an insight card on the Dashboard — not "your bench press hasn't moved" but "your bench press has stalled for 3 sessions. Your effort ratings show you're consistently hitting Hard by set 2 — this is a recovery signal, not a strength ceiling. Consider a deload week at 80% before pushing to 190." Actionable, personalized, grounded in the user's own data.
+
+**Progressive overload suggestions**: before each exercise in routine mode, show what the user did last session alongside their effort rating. If last effort was Easy or Medium, suggest +5 lbs. If Hard, hold or microload. One query, shown inline on the exercise card before the user speaks — they start with a concrete target, not just their memory.
+
+**PR detection**: the data is already there — max weight per exercise per session is computed for the progress charts. Compare today's max to the all-time max; if it's a new record, fire a celebration on the workout summary screen. Simple, high emotional impact.
+
+**Rest timer**: after a set is logged, auto-start a configurable countdown (60s / 90s / 2min, set per exercise in the routine). No infrastructure needed — just a timer component and a notification permission. Huge practical value in the gym where you're not staring at the screen between sets.
+
+**Streaming voice feedback**: show a live transcript as the user speaks rather than waiting for them to tap stop. The Web Speech API supports `interimResults` — wiring that to a live preview would make the mic feel more responsive.
 
 **Progressive Web App**: add a service worker and manifest so users can install VoiceLift to their home screen and use it in the gym without opening a browser tab. Offline set-logging with a sync queue when connectivity returns.
 
