@@ -2,6 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
+import { Suspense } from 'react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -37,7 +38,7 @@ interface LiveExercise {
 
 interface Routine { id: string; name: string }
 
-export default function WorkoutPage() {
+function WorkoutPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -508,5 +509,13 @@ export default function WorkoutPage() {
         onRemove={async () => { setShowSummary(false); await removeWorkout() }}
       />
     </div>
+  )
+}
+
+export default function WorkoutPage() {
+  return (
+    <Suspense>
+      <WorkoutPageInner />
+    </Suspense>
   )
 }
