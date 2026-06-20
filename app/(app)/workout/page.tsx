@@ -130,7 +130,7 @@ function WorkoutPageInner() {
     if (rt) { setRoutine(rt); setMode('routine') }
     else setMode('free-form')
 
-    const exs = (workout.workout_exercises as unknown as Array<{
+    const savedExs = (workout.workout_exercises as unknown as Array<{
       id: string; exercise_name: string; wger_exercise_id: number | null
       position: number; status: string
       sets: Array<{ id: string; weight_lbs: number | null; reps: number; effort: string; set_number: number }>
@@ -141,16 +141,48 @@ function WorkoutPageInner() {
         exercise_name: ex.exercise_name,
         wger_exercise_id: ex.wger_exercise_id,
         position: ex.position,
+        target_sets: undefined as number | null | undefined,
+        target_reps: undefined as number | null | undefined,
         sets: ex.sets.sort((a, b) => a.set_number - b.set_number).map(s => ({
           id: s.id,
           weightLbs: s.weight_lbs,
           reps: s.reps,
           effort: s.effort as 'easy' | 'medium' | 'hard',
         })),
-        completed: ex.status === 'completed',
+        completed: ex.status === 'completed' && ex.sets.length > 0,
         skipped: ex.status === 'skipped',
       }))
-    setExercises(exs)
+
+    // For routine drafts, fill in any exercises not yet saved so they appear as unstarted cards
+    let allExercises = savedExs
+    if (workout.routine_id) {
+      const { data: rtData } = await supabase
+        .from('routines')
+        .select('routine_exercises(id, exercise_name, wger_exercise_id, position, target_sets, target_reps)')
+        .eq('id', workout.routine_id)
+        .single()
+
+      if (rtData) {
+        const savedPositions = new Set(savedExs.map(e => e.position))
+        const missing = (rtData.routine_exercises as unknown as RoutineExercise[])
+          .sort((a, b) => a.position - b.position)
+          .filter(ex => !savedPositions.has(ex.position))
+          .map((ex, i) => ({
+            id: `temp-resume-${i}`,
+            exercise_name: ex.exercise_name,
+            wger_exercise_id: ex.wger_exercise_id,
+            position: ex.position,
+            target_sets: ex.target_sets,
+            target_reps: ex.target_reps,
+            sets: [] as LiveSet[],
+            completed: false,
+            skipped: false,
+          }))
+        allExercises = [...savedExs, ...missing].sort((a, b) => a.position - b.position)
+      }
+    }
+
+    setExercises(allExercises)
   }
 
   const startRoutineWorkout = async (routineId: string) => {
@@ -248,6 +280,7 @@ function WorkoutPageInner() {
   const leaveWorkout = () => {
     // Clear the ref BEFORE navigating so beforeunload handler doesn't fire
     workoutIdRef.current = null
+    router.refresh()  // invalidate RSC cache so dashboard re-fetches draft status
     router.push('/')
   }
 
